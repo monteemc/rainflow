@@ -30,6 +30,7 @@ module RainFlow
   where
 
 import Data.Monoid
+-- import Data.List (intersperse)
 -- import Data.Foldable
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Map.Strict as M
@@ -46,7 +47,7 @@ stress s = s
 newtype Stresses = Sts (V.Vector Stress) deriving (Ord, Eq)
 
 instance Show Stresses where
-  show (Sts v) = show $ V.toList v
+  show (Sts xs) = show $ V.toList xs
 
 -- | Constructs an empty Stress array
 emptyStresses :: Stresses
@@ -80,18 +81,17 @@ trimExtremities (Sts xs)
   | V.length xs <= 2 = emptyStresses
   | otherwise = Sts . V.tail . V.init $ xs
 
+{-- Full (no adittional Half Cycle)
+    or Half cycle (only apply to more advance cycle count techniques) --}
+data HalfCycle = NoHC | HC deriving (Show, Ord, Eq)
+
 -- | Cycles counted. With a resolution of 0.5 cycles.
 data CycleCount = CyC
     { cCount :: Word
     , hCycle :: HalfCycle} deriving (Ord, Eq)
 
-{-- Full (no adittional Half Cycle)
-    or Half cycle (only apply to more advance cycle count techniques) --}
-data HalfCycle = NoHC | HC deriving (Show, Ord, Eq)
-
 instance Show CycleCount where
-  show cc = show
-    (fromIntegral (cCount cc) + (if hCycle cc == HC then 0.5 else 0) :: Float)
+  show cc = show (fromIntegral (cCount cc) + (if hCycle cc == HC then 0.5 else 0) :: Float)
 
 -- Monoid CycleCount
 instance Monoid CycleCount where
@@ -127,7 +127,10 @@ newtype RFRanges = RFRs (M.Map (Stress, Stress) CycleCount) deriving (Ord, Eq)
 -- type RFRanges = M.Map (Stress, Stress) CycleCount
 
 instance Show RFRanges where
-  show (RFRs m) = M.foldlWithKey' (\ ls k cc -> ls ++ show k ++ show cc ++ "\n") "" m
+  show (RFRs m) = M.foldlWithKey' (\ ls (aSt, mSt) cc ->
+    concat [ls, " ", show aSt, " ", show mSt, " ", show cc, "\n"]) "" m
+    -- concat $ intersperse " " [show ls, show aSt, show mSt] ++ ["\n"]) "" m
+  -- ls ++ show k ++ show cc ++ "\n") "" m
 
 -- | Constructs an empty block of rainflow counts
 emptyRFRanges :: RFRanges
@@ -220,52 +223,3 @@ rangesToBins :: RFRanges -- ^ Rainflow count data
              -> RFBins -- ^ New rainflow bin count data
 rangesToBins (RFRs rfR) rfB = M.foldrWithKey (\(aSt, mSt) cc rfb ->
     insRangeBin aSt mSt cc rfb) rfB rfR
-
-
-
-
-{--
-      5.4.4 Rainflow Counting:
-      5.4.4.1 Rules for this method are as follows: let X denote range under consideration;
-       Y, previous range adjacent to X; and S, starting point in the history.
-      (1) Read next peak or valley. If out of data, go to Step 6.
-      (2) If there are less than three points, go to Step 1. Form
-      ranges X and Y using the three most recent peaks and valleys
-      that have not been discarded.
-      (3) Compare the absolute values of ranges X and Y.
-      (a) If X < Y, go to Step 1.
-      (b) If X ≥ Y, go to Step 4.
-      (4) If range Y contains the starting point S, go to Step 5;
-      otherwise, count range Y as one cycle; discard the peak and
-      valley of Y; and go to Step 2.
-      (5) Count range Y as one-half cycle; discard the first point
-      (peak or valley) in range Y; move the starting point to the
-      second point in range Y; and go to Step 2.
-      (6) Count each range that has not been previously counted
-      as one-half cycle.
-      5.4.4.2 The load history of Fig. 4 is replotted as Fig. 6(a)
-      and is used to illustrate the process. Details of the cycle
-      counting are as follows:
-      (1) S = A; Y = |A-B |; X = |B-C|; X > Y. Y contains S, that is,
-      point A. Count |A-B| as one-half cycle and discard point A;
-      S = B. (See Fig. 6(b).)
-      (2) Y = |B-C|; X = |C-D|; X > Y. Y contains S, that is, point
-      B. Count| B-C| as one-half cycle and discard point B; S = C.
-      (See Fig. 6(c).)
-      (3) Y = |C-D|; X = |D-E|; X < Y.
-      (4) Y = |D-E|; X = |E-F|; X < Y.
-      (5) Y = |E-F|; X = |F-G|; X > Y. Count |E-F| as one cycle
-      and discard points E and F. (See Fig. 6(d). Note that a cycle is
-      formed by pairing range E-F and a portion of range F-G.)
-      (6) Y = |C-D|; X = |D-G|; X > Y; Y contains S, that is, point
-      C. Count |C-D| as one-half cycle and discard point C. S = D.
-      (See Fig. 6(e).)
-      (7) Y = |D-G|; X = |G-H|; X < Y.
-      (8) Y = |G-H|; X = |H-I|; X < Y. End of data.
-      (9) Count |D-G| as one-half cycle, |G-H| as one-half cycle,
-      and| H-I| as one-half cycle. (See Fig. 6(f).)
-      (10) End of counting. See the table in Fig. 6 for a summary
-      of the cycles counted in this example, and see Appendix X1.3
-      for this cycle count in the form of a range-mean matrix.
-
-      --}
